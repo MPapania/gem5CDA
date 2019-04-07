@@ -50,6 +50,7 @@ import m5
 from m5.util import addToPath
 from m5.objects import *
 import argparse
+import optparse
 
 m5.util.addToPath('../..')
 
@@ -147,9 +148,18 @@ def create(args):
     # within the cluster.
     for cluster in system.cpu_cluster:
         system.addCaches(want_caches, last_cache_level=2)
-    
-        # MOS - Allow for kernel to print status while booting
-        "earlyprintk=pl011,0x1c090000",       
+
+    # Setup gem5's minimal Linux boot loader.
+    system.realview.setupBootLoader(system.membus, system, SysPaths.binary)
+
+    if args.dtb:
+        system.dtb_filename = args.dtb
+    else:
+        # No DTB specified: autogenerate DTB
+        system.generateDtb(m5.options.outdir, 'system.dtb')
+
+    # Linux boot command flags
+    kernel_cmd = [
         # Tell Linux to use the simulated serial port as a console
         "console=ttyAMA0",
         # Hard-code timi
@@ -157,13 +167,14 @@ def create(args):
         # Disable address space randomisation to get a consistent
         # memory layout.
         "norandmaps",
-        # Tell Linux where to find the root disk image.        
+        # Tell Linux where to find the root disk image.
         "root=/dev/vda1",
         # Mount the root disk read-write by default.
         "rw",
         # Tell Linux about the amount of physical memory present.
         "mem=%s" % args.mem_size,
     ]
+
     system.boot_osflags = " ".join(kernel_cmd)
 
     return system
@@ -190,48 +201,34 @@ def run(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(epilog=__doc__)
+    parser = optparse.OptionParser()
 
-    parser.add_argument("--dtb", type=str, default=None,
+    parser.add_option("--dtb", type="string", default=None,
                         help="DTB file to load")
-    parser.add_argument("--kernel", type=str, default=default_kernel,
-                        help="Linux kernel")
-    parser.add_argument("--disk-image", type=str,
-                        default=default_disk,
-                        help="Disk to instantiate")
-    parser.add_argument("--script", type=str, default="",
-                        help = "Linux bootscript")
-    parser.add_argument("--cpu", type=str, choices=cpu_types.keys(),
+    parser.add_option("--cpu", type="string",
                         default="atomic",
                         help="CPU model to use")
-    parser.add_argument("--cpu-freq", type=str, default="4GHz")
-    parser.add_argument("--num-cores", type=int, default=1,
+    parser.add_option("--cpu-freq", type="string", default="4GHz")
+    parser.add_option("--num-cores", type="int", default=1,
                         help="Number of CPU cores")
-    parser.add_argument("--mem-type", default="DDR3_1600_8x8",
-                        choices=MemConfig.mem_names(),
-                        help = "type of memory to use")
-    parser.add_argument("--mem-channels", type=int, default=1,
-                        help = "number of memory channels")
-    parser.add_argument("--mem-ranks", type=int, default=None,
-                        help = "number of memory ranks per channel")
-    parser.add_argument("--mem-size", action="store", type=str,
-                        default="2GB",
-                        help="Specify the physical memory size")
-    parser.add_argument("--checkpoint", action="store_true")
-    parser.add_argument("--restore", type=str, default=None)
+    parser.add_option("--checkpoint", action="store_true")
+    parser.add_option("--restore", type="string", default=None)
+
+    Options.addCommonOptions(parser)
+    Options.addFSOptions(parser)
 
 
-    args = parser.parse_args()
+    (options, args) = parser.parse_args()
 
     root = Root(full_system=True)
-    root.system = create(args)
+    root.system = create(options)
 
-    if args.restore is not None:
-        m5.instantiate(args.restore)
+    if options.restore is not None:
+        m5.instantiate(options.restore)
     else:
         m5.instantiate()
 
-    run(args)
+    run(options)
 
 
 if __name__ == "__m5_main__":

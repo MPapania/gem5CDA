@@ -152,6 +152,7 @@ def create(args):
     # Setup gem5's minimal Linux boot loader.
     system.realview.setupBootLoader(system.membus, system, SysPaths.binary)
 
+    # This is not necessary
     if args.dtb:
         system.dtb_filename = args.dtb
     else:
@@ -160,6 +161,8 @@ def create(args):
 
     # Linux boot command flags
     kernel_cmd = [
+        # MOS - Allows for early printing of Kernel boot status
+        "earlyprintk=pl011,0x1c090000", 
         # Tell Linux to use the simulated serial port as a console
         "console=ttyAMA0",
         # Hard-code timi
